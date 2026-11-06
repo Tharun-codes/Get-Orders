@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 dotenv.config();
 
-const APP_DIR = fileURLToPath(new URL(".", import.meta.url));
+const PUBLIC_DIR = fileURLToPath(new URL("./public/", import.meta.url));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -19,9 +19,9 @@ const pool = new Pool({
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.static(PUBLIC_DIR));
 app.get(["/", "/generate_bill.html"], (req, res) => {
-  res.sendFile("generate_bill.html", { root: APP_DIR });
+  res.sendFile("generate_bill.html", { root: PUBLIC_DIR });
 });
 
 const PORT = process.env.PORT || 3000;
