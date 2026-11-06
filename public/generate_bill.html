@@ -283,6 +283,7 @@
     <div class="actions">
       <button id="btnPreview">Generate Bill (Preview)</button>
       <button id="btnDownload">Download Bill</button>
+      <button id="btnWhatsApp">Share via WhatsApp</button>
       <button class="secondary" id="btnReset">Reset</button>
     </div>
 
@@ -301,6 +302,9 @@
   const itemsContainer = document.getElementById('itemsContainer');
   const previewBox = document.getElementById('billPreview');
   let savedPayload = null; // used by download button
+  let preparedBillPdf = null;
+  let preparedBillSignature = null;
+  let preparedBillPromise = null;
 
   // populate product checkboxes
   PRODUCTS.forEach(p=>{
@@ -406,6 +410,7 @@ const address = val("address");
         name, phone, alt_phone: alt, address, rent_start, rent_end,
         items: items.map(it => ({ product: it.product, price: it.price, quantity: it.quantity }))
       };
+      prepareBillPdf();
 
       // render preview
       let html = `<div style="display:flex;justify-content:space-between;align-items:center">
@@ -439,46 +444,135 @@ const address = val("address");
     }
   }
 
-  // ---------- DOWNLOAD (call backend) ----------
-  document.getElementById('btnDownload').addEventListener('click', async ()=>{
-    if (!savedPayload) {
-      // try to auto-generate payload from UI
-      try {
-        generatePreview(); // will set savedPayload
-      } catch (e) {
-        alert('Generate preview first or fix the input');
-        return;
-      }
+  async function requestBillPdf(payload){
+    const res = await fetch('/api/generate-bill', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Error generating bill');
     }
-    // final check
-    if (!savedPayload) { alert('No bill data to send'); return; }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    return {
+      blob: await res.blob(),
+      filename: disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'invoice.pdf'
+    };
+  }
 
-    try {
-      const res = await fetch('/api/generate-bill', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(savedPayload)
+  function prepareBillPdf(){
+    const signature = JSON.stringify(savedPayload);
+    if (preparedBillSignature === signature && preparedBillPromise) return;
+    preparedBillSignature = signature;
+    preparedBillPdf = null;
+    preparedBillPromise = requestBillPdf(savedPayload)
+      .then(bill => {
+        if (JSON.stringify(savedPayload) === signature) {
+          preparedBillPdf = { ...bill, signature };
+        }
+        return bill;
+      })
+      .catch(err => {
+        console.error('Could not prepare bill PDF:', err);
+        return null;
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || 'Error generating bill');
-        return;
-      }
-      const pdf = await res.blob();
-      const downloadUrl = URL.createObjectURL(pdf);
-      const link = document.createElement('a');
-      const disposition = res.headers.get('Content-Disposition') || '';
-      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'invoice.pdf';
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  }
+
+  async function getBillPdf(){
+    if (!savedPayload) generatePreview();
+    if (!savedPayload) return null;
+
+    const signature = JSON.stringify(savedPayload);
+    if (preparedBillPdf?.signature === signature) return preparedBillPdf;
+    if (preparedBillSignature === signature && preparedBillPromise) {
+      const bill = await preparedBillPromise;
+      if (bill) return bill;
+    }
+
+    const bill = await requestBillPdf(savedPayload);
+    preparedBillPdf = { ...bill, signature };
+    preparedBillSignature = signature;
+    return preparedBillPdf;
+  }
+
+  function downloadPdf(blob, filename){
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  }
+
+  function getBillShareText(){
+    const days = computeDays(savedPayload.rent_start, savedPayload.rent_end);
+    const perDayTotal = savedPayload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const lines = savedPayload.items.map(item =>
+      `${item.product}: ${item.quantity} x Rs. ${Number(item.price).toFixed(2)}`
+    );
+    const rentDates = savedPayload.rent_start || savedPayload.rent_end
+      ? `Rent: ${savedPayload.rent_start || '-'} to ${savedPayload.rent_end || '-'}`
+      : '';
+    return [
+      'SUBRAMANI ENTERPRISES - Bill',
+      `Customer: ${savedPayload.name}`,
+      `Phone: ${savedPayload.phone}`,
+      ...lines,
+      rentDates,
+      `Days: ${days}`,
+      `Total: Rs. ${(perDayTotal * days).toFixed(2)}`
+    ].filter(Boolean).join('\n');
+  }
+
+  // ---------- DOWNLOAD PDF ----------
+  document.getElementById('btnDownload').addEventListener('click', async ()=>{
+    try {
+      const bill = await getBillPdf();
+      if (bill) downloadPdf(bill.blob, bill.filename);
     } catch (err) {
       console.error(err);
-      alert('Server error while generating bill');
+      alert(err.message || 'Server error while generating bill');
     }
+  });
+
+  // ---------- SHARE VIA WHATSAPP ----------
+  document.getElementById('btnWhatsApp').addEventListener('click', ()=>{
+    if (!savedPayload) generatePreview();
+    if (!savedPayload) return;
+
+    const shareText = getBillShareText();
+    const signature = JSON.stringify(savedPayload);
+    const readyBill = preparedBillPdf?.signature === signature ? preparedBillPdf : null;
+    const shareUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+
+    if (readyBill) {
+      const file = new File([readyBill.blob], readyBill.filename, { type: 'application/pdf' });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        try {
+          navigator.share({ title: 'Bill from SUBRAMANI ENTERPRISES', text: shareText, files: [file] })
+            .catch(err => {
+              if (err.name !== 'AbortError') {
+                console.error(err);
+                alert('Could not share the PDF. Download it and attach it in WhatsApp instead.');
+              }
+            });
+          return;
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+
+    window.open(shareUrl, '_blank');
+    getBillPdf().then(bill => {
+      if (bill) downloadPdf(bill.blob, bill.filename);
+    }).catch(err => {
+      console.error(err);
+      alert(err.message || 'Could not generate the PDF bill');
+    });
   });
 
   // ---------- RESET ----------
@@ -491,6 +585,9 @@ const address = val("address");
     document.getElementById('rent_end').value='';
     previewBox.style.display = 'none';
     savedPayload = null;
+    preparedBillPdf = null;
+    preparedBillSignature = null;
+    preparedBillPromise = null;
     // remove rows & uncheck products
     PRODUCTS.forEach(p=>{
       const chk = document.getElementById(`chk_${p}`);
