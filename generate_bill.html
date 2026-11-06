@@ -240,17 +240,8 @@
 <body>
   <div class="wrap">
     <div class="top-row">
-      <div><h2>Generate Bill</h2><div class="muted">Fetch existing customer or enter details manually</div></div>
-      <div><a class="back" href="home.html">← Back</a></div>
+      <div><h2>Generate Bill</h2><div class="muted">Search an existing customer or enter details manually</div></div>
     </div>
-
-    <!-- Search (fixed spacing + proper input) -->
-    <div class="search-wrapper">
-      <label>Search Customer by name</label>
-      <input id="searchName" type="text" placeholder="Type name (even one letter)..." autocomplete="off" />
-      <div id="searchResults"></div>
-    </div>
-
     <hr/>
 
     <!-- Customer fields -->
@@ -305,11 +296,9 @@
 }
 
   // ---------- CONFIG ----------
-  const PRODUCTS = ["xframe","alige","piller box","wheels","painting ladder","motor","supportings","machine"];
+  const PRODUCTS = ["xframe","alige","piller box","wheels","painting ladder","motor","supportings","machine","poles","board","ladder","lift","jack"];
   const productsList = document.getElementById('productsList');
   const itemsContainer = document.getElementById('itemsContainer');
-  const searchInput = document.getElementById('searchName');
-  const searchResults = document.getElementById('searchResults');
   const previewBox = document.getElementById('billPreview');
   let savedPayload = null; // used by download button
 
@@ -319,13 +308,6 @@
     div.className = 'product-checkbox';
     div.innerHTML = `<label style="margin:0;cursor:pointer"><input type="checkbox" id="chk_${p}" /> ${p}</label>`;
     productsList.appendChild(div);
-    // click toggles checkbox and row
-    div.addEventListener('click', (e)=>{
-      if (e.target.tagName === 'INPUT') return; // checkbox handled
-      const chk = document.getElementById(`chk_${p}`);
-      chk.checked = !chk.checked;
-      toggleProductRow(p, chk.checked);
-    });
     // listen change on checkbox
     div.querySelector('input').addEventListener('change', (ev)=>{
       toggleProductRow(p, ev.target.checked);
@@ -360,90 +342,10 @@
     if (r) r.remove();
   }
 
-  // ---------- LIVE SEARCH ----------
-  let searchTimer = null;
-  searchInput.addEventListener('keyup', () => {
-    clearTimeout(searchTimer);
-    const q = searchInput.value.trim();
-    if (!q) {
-      searchResults.style.display = 'none';
-      searchResults.innerHTML = '';
-      return;
-    }
-    // small debounce
-    searchTimer = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/customers?q=' + encodeURIComponent(q));
-        const data = await res.json();
-        if (!data || !data.rows) {
-          searchResults.style.display = 'none';
-          return;
-        }
-        if (data.rows.length === 0) {
-          searchResults.style.display = 'block';
-          searchResults.innerHTML = '<div class="muted">No results</div>';
-          return;
-        }
-        // render each row as .sr-item for spacing/hover
-        searchResults.style.display = 'block';
-        searchResults.innerHTML = data.rows.map(r => `<div class="sr-item" data-id="${r.id}">${escapeHtml(r.name)} — ${escapeHtml(r.phone)}</div>`).join('');
-        // attach listeners
-        searchResults.querySelectorAll('.sr-item').forEach(el=>{
-          el.addEventListener('click', ()=> selectCustomer(el.getAttribute('data-id')));
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    }, 180);
-  });
-
-  // escape helper
-  function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
-
-  // ---------- SELECT CUSTOMER ----------
-  async function selectCustomer(id){
-    try {
-      const res = await fetch('/api/customer-details?id=' + encodeURIComponent(id));
-      const data = await res.json();
-      if (!data.success) { alert('Could not load customer'); return; }
-      const c = data.customer;
-      document.getElementById('customerName').value = c.name || '';
-      document.getElementById('phone').value = c.phone || '';
-      document.getElementById('altPhone').value = c.alt_phone || '';
-      document.getElementById('address').value = c.address || '';
-
-      searchResults.style.display = 'none';
-      // load most recent order items automatically if present
-      if (data.orderDetails && data.orderDetails.length) {
-        const last = data.orderDetails[0];
-        // reset product rows
-        PRODUCTS.forEach(p => {
-          const chk = document.getElementById(`chk_${p}`);
-          if (chk) chk.checked = false;
-          const row = document.getElementById(`row_${p}`);
-          if (row) row.remove();
-        });
-        // set rent dates if present
-        if (last.order) {
-          if (last.order.rent_start) document.getElementById('rent_start').value = last.order.rent_start.split('T')[0];
-          if (last.order.rent_end) document.getElementById('rent_end').value = last.order.rent_end.split('T')[0];
-        }
-        // fill items
-        (last.items || []).forEach(it => {
-          const prod = it.product;
-          const chk = document.getElementById(`chk_${prod}`);
-          if (chk) chk.checked = true;
-          toggleProductRow(prod, true);
-          const priceEl = document.getElementById(`price_${prod}`);
-          const qtyEl = document.getElementById(`qty_${prod}`);
-          if (priceEl) priceEl.value = Number(it.price);
-          if (qtyEl) qtyEl.value = Number(it.quantity);
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Error loading customer');
-    }
+  function escapeHtml(value){
+    return String(value || '').replace(/[&<>\"]/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+    }[character]));
   }
 
   // ---------- PREVIEW ----------
@@ -557,13 +459,22 @@ const address = val("address");
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(savedPayload)
       });
-      const data = await res.json();
-      if (!data.success) {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         alert(data.error || 'Error generating bill');
         return;
       }
-      // open invoice PDF
-      window.open(`/api/invoice/${data.orderId}`, '_blank');
+      const pdf = await res.blob();
+      const downloadUrl = URL.createObjectURL(pdf);
+      const link = document.createElement('a');
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || 'invoice.pdf';
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
     } catch (err) {
       console.error(err);
       alert('Server error while generating bill');
@@ -578,8 +489,6 @@ const address = val("address");
     document.getElementById('address').value = '';
     document.getElementById('rent_start').value='';
     document.getElementById('rent_end').value='';
-    searchInput.value = '';
-    searchResults.style.display = 'none';
     previewBox.style.display = 'none';
     savedPayload = null;
     // remove rows & uncheck products
@@ -589,14 +498,6 @@ const address = val("address");
       const r = document.getElementById(`row_${p}`);
       if (r) r.remove();
     });
-  });
-
-  // ---------- helpful: press Enter in search to select first result ----------
-  searchInput.addEventListener('keydown', (e)=>{
-    if (e.key === 'Enter') {
-      const first = searchResults.querySelector('.sr-item[data-id]');
-      if (first) selectCustomer(first.getAttribute('data-id'));
-    }
   });
 
   // ---------- init ----------
