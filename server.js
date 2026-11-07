@@ -61,11 +61,13 @@ app.post("/api/generate-bill", async (req, res) => {
   const daysCount = start && end ? Math.max(1, end.diff(start, "day") + 1) : 1;
   const perDayTotal = billItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const grandTotal = perDayTotal * daysCount;
-  const invoiceId = `${String(phone).replace(/\D/g, "") || "bill"}-${dayjs().format("YYYYMMDD-HHmmss")}`;
+  const safeName = String(name).trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/[. ]+$/g, "") || "customer";
+  const fallbackName = safeName.replace(/[^\x20-\x7E]/g, "_");
+  const encodedName = encodeURIComponent(safeName).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 
   const doc = new PDFDocument({ size: "A4", margin: 40 });
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoiceId}.pdf"`);
+  res.setHeader("Content-Disposition", `attachment; filename="${fallbackName}.pdf"; filename*=UTF-8''${encodedName}.pdf`);
   doc.on("error", (err) => {
     console.error("PDF GENERATION ERROR:", err);
     if (!res.headersSent) res.status(500).end("PDF Error");
@@ -83,7 +85,9 @@ app.post("/api/generate-bill", async (req, res) => {
   let y = 125;
   doc.text(`DATE: ${dayjs().format("DD/MM/YYYY")}`, 40, y, { width: pageWidth, align: "center" });
   y += 24;
+  doc.font("Helvetica-Bold");
   doc.text(`CUSTOMER NAME: ${name}`, 40, y, { width: pageWidth, align: "center" });
+  doc.font("Helvetica");
   y += 24;
   doc.text(`PHONE: ${phone}${alt_phone ? ` / ${alt_phone}` : ""}`, 40, y, { width: pageWidth, align: "center" });
   y += 24;
@@ -91,15 +95,18 @@ app.post("/api/generate-bill", async (req, res) => {
   y = doc.y + 16;
   const rentStart = start ? start.format("DD/MM/YYYY") : "-";
   const rentEnd = end ? end.format("DD/MM/YYYY") : "-";
+  doc.font("Helvetica-Bold");
   doc.text(`RENT: ${rentStart} - ${rentEnd} (${daysCount} day${daysCount === 1 ? "" : "s"})`, 40, y, { width: pageWidth, align: "center" });
+  doc.font("Helvetica");
 
   y = doc.y + 30;
   const drawTableHeader = (top) => {
     doc.font("Helvetica-Bold").fontSize(11).fillColor(teal);
     doc.text("DESCRIPTION", 40, top);
     doc.text("PRICE", 260, top);
-    doc.text("QTY", 350, top);
-    doc.text("AMOUNT", 450, top);
+    doc.text("QTY", 340, top);
+    doc.text("RATE/DAY", 390, top);
+    doc.text("AMOUNT", 465, top);
     doc.moveTo(40, top + 16).lineTo(550, top + 16).strokeColor(teal).stroke();
     doc.font("Helvetica").fontSize(10).fillColor("#000");
   };
@@ -114,10 +121,11 @@ app.post("/api/generate-bill", async (req, res) => {
       y += 28;
     }
     const amount = item.price * item.quantity * daysCount;
-    doc.text(item.product, 40, y, { width: 205 });
+    doc.text(item.product.toUpperCase(), 40, y, { width: 200 });
     doc.text(item.price.toFixed(2), 260, y);
-    doc.text(String(item.quantity), 350, y);
-    doc.text(`Rs. ${amount.toFixed(2)}`, 450, y);
+    doc.text(String(item.quantity), 340, y);
+    doc.text(`${(item.price * item.quantity).toFixed(2)} x ${daysCount}`, 390, y, { width: 65 });
+    doc.text(`Rs. ${amount.toFixed(2)}`, 465, y);
     y += 28;
     doc.moveTo(40, y).lineTo(550, y).strokeColor("#ddd").stroke();
     y += 10;
@@ -138,7 +146,7 @@ app.post("/api/generate-bill", async (req, res) => {
   doc.font("Helvetica-Bold").fontSize(14).fillColor(teal).text(`TOTAL: Rs. ${grandTotal.toFixed(2)}`, 40, y);
   doc.moveDown(3);
   doc.font("Helvetica").fontSize(9).fillColor(teal).text(
-    "5TH CROSS, CANNEL RIGHT SIDE, VENKATESHA NAGAR, SHIMOGA | 577202 | PHONE: 6363499137",
+    "5TH CROSS, CHANNEL RIGHT SIDE, VENKATESHA NAGAR, SHIMOGA | 577202 | PHONE: 6363499137",
     { align: "center" }
   );
   doc.moveDown(1);
@@ -222,7 +230,9 @@ app.get("/api/invoice/:orderId", async (req, res) => {
       { align: "center" }
     );
     cy += 25;
+    doc.font("Helvetica-Bold");
     doc.text(`CUSTOMER NAME: ${order.cname}`, 0, cy, { align: "center" });
+    doc.font("Helvetica");
     cy += 25;
     doc.text(`PHONE: ${order.cphone}`, 0, cy, { align: "center" });
     cy += 25;
@@ -246,12 +256,14 @@ app.get("/api/invoice/:orderId", async (req, res) => {
     }
 
     // Show Rent + Days
+    doc.font("Helvetica-Bold");
     doc.text(
       `RENT: ${rentStartStr} - ${rentEndStr} (${daysCount} Day${daysCount > 1 ? "s" : ""})`,
       0,
       cy,
       { align: "center" }
     );
+    doc.font("Helvetica");
 
 
     // Table header
@@ -259,8 +271,9 @@ app.get("/api/invoice/:orderId", async (req, res) => {
     doc.font("Helvetica-Bold").fontSize(11).fillColor(teal);
     doc.text("DESCRIPTION", 40, tableTop);
     doc.text("PRICE", 260, tableTop);
-    doc.text("QTY", 350, tableTop);
-    doc.text("AMOUNT", 450, tableTop);
+    doc.text("QTY", 340, tableTop);
+    doc.text("RATE/DAY", 390, tableTop);
+    doc.text("AMOUNT", 465, tableTop);
     doc
       .moveTo(40, tableTop + 15)
       .lineTo(550, tableTop + 15)
@@ -274,7 +287,8 @@ app.get("/api/invoice/:orderId", async (req, res) => {
     for (const it of itemsQ.rows) {
       const price = safeNumber(it.price);
       const qty = safeNumber(it.quantity);
-      const amount = (safeNumber(it.line_total) || (price * qty)) * daysCount;
+      const perDayAmount = safeNumber(it.line_total) || (price * qty);
+      const amount = perDayAmount * daysCount;
 
       // If next row exceeds current page space, start new page & redraw header
       if (y + 50 > doc.page.height - 60) {
@@ -287,8 +301,9 @@ app.get("/api/invoice/:orderId", async (req, res) => {
         doc.font("Helvetica-Bold").fontSize(11).fillColor(teal);
         doc.text("DESCRIPTION", 40, y);
         doc.text("PRICE", 260, y);
-        doc.text("QTY", 350, y);
-        doc.text("AMOUNT", 450, y);
+        doc.text("QTY", 340, y);
+        doc.text("RATE/DAY", 390, y);
+        doc.text("AMOUNT", 465, y);
 
         doc
           .moveTo(40, y + 15)
@@ -301,14 +316,15 @@ app.get("/api/invoice/:orderId", async (req, res) => {
       }
 
       // print row
-      doc.text(it.product, 40, y);
+      doc.text(String(it.product).toUpperCase(), 40, y, { width: 200 });
       doc.text(price.toFixed(2), 260, y);
-      doc.text(String(qty), 350, y);
-      doc.text(amount.toFixed(2), 450, y);
+      doc.text(String(qty), 340, y);
+      doc.text(`${perDayAmount.toFixed(2)} x ${daysCount}`, 390, y, { width: 65 });
+      doc.text(amount.toFixed(2), 465, y);
 
       // breakdown
       doc.fontSize(8).fillColor("#555")
-        .text(`(${price} × ${qty} × ${daysCount})`, 450, y + 10);
+        .text(`(${price} × ${qty} × ${daysCount})`, 465, y + 10);
 
       doc.fontSize(10).fillColor("#000");
 
@@ -373,7 +389,7 @@ app.get("/api/invoice/:orderId", async (req, res) => {
       .fontSize(10)
       .fillColor(teal)
       .text(
-        "5TH CROSS, CANNEL RIGHT SIDE, VENKATESHA NAGAR, SHIMOGA | 577202 | PHONE: 6363499137",
+        "5TH CROSS, CHANNEL RIGHT SIDE, VENKATESHA NAGAR, SHIMOGA | 577202 | PHONE: 6363499137",
         { align: "center" }
       );
     doc.moveDown(1);
