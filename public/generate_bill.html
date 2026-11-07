@@ -419,6 +419,13 @@
     accent-color: var(--peacock);
   }
 
+  .field-error {
+    margin: 10px 0 0;
+    color: #A13F2B;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
   .item-row {
     display: grid;
     grid-template-columns: minmax(150px, 1fr) minmax(120px, 180px) minmax(120px, 150px) auto;
@@ -593,6 +600,7 @@
           <h3 id="productsSectionTitle">Products</h3>
         </div>
         <div id="productsList" class="products"></div>
+        <p id="productValidationMessage" class="field-error" role="alert" hidden></p>
         <div id="itemsContainer"></div>
       </section>
 
@@ -653,6 +661,7 @@
   });
 
   function toggleProductRow(prod, isChecked){
+    document.getElementById('productValidationMessage').hidden = true;
     if (isChecked) {
       if (document.getElementById(`row_${prod}`)) return;
       const row = document.createElement('div');
@@ -660,8 +669,8 @@
       row.id = `row_${prod}`;
       row.innerHTML = `
         <div style="flex:1"><strong>${prod}</strong></div>
-        <input placeholder="Price" id="price_${prod}" type="number" min="0" step="0.01" />
-        <input placeholder="Quantity" id="qty_${prod}" type="number" min="1" />
+        <input placeholder="Price" id="price_${prod}" type="number" min="0.01" step="0.01" required />
+        <input placeholder="Quantity" id="qty_${prod}" type="number" min="1" required />
         <div><button type="button" onclick="removeProduct('${prod}')">Remove</button></div>
       `;
       itemsContainer.appendChild(row);
@@ -688,6 +697,54 @@
 
   // ---------- PREVIEW ----------
   document.getElementById('btnPreview').addEventListener('click', generatePreview);
+
+  function focusInvalidField(field, message){
+    if (!field.dataset.validationHandler) {
+      field.addEventListener('input', () => field.setCustomValidity(''));
+      field.dataset.validationHandler = 'true';
+    }
+    field.setCustomValidity(message);
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field.focus({ preventScroll: true });
+    field.reportValidity();
+    return false;
+  }
+
+  function validateBillForm(){
+    const requiredFields = [
+      ['customerName', 'Enter the customer name.'],
+      ['phone', 'Enter the customer phone number.'],
+      ['address', 'Enter the customer address.']
+    ];
+    for (const [id, message] of requiredFields) {
+      const field = document.getElementById(id);
+      if (!field.value.trim()) return focusInvalidField(field, message);
+    }
+
+    const selectedProducts = PRODUCTS.filter(product =>
+      document.getElementById(`chk_${product}`).checked
+    );
+    if (selectedProducts.length === 0) {
+      const message = document.getElementById('productValidationMessage');
+      message.textContent = 'Select at least one product to continue.';
+      message.hidden = false;
+      productsList.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.getElementById(`chk_${PRODUCTS[0]}`).focus({ preventScroll: true });
+      return false;
+    }
+
+    for (const product of selectedProducts) {
+      const priceField = document.getElementById(`price_${product}`);
+      const quantityField = document.getElementById(`qty_${product}`);
+      if (!priceField.value || !priceField.checkValidity()) {
+        return focusInvalidField(priceField, 'Enter a price greater than zero.');
+      }
+      if (!quantityField.value || !quantityField.checkValidity()) {
+        return focusInvalidField(quantityField, 'Enter a whole quantity of at least 1.');
+      }
+    }
+    return true;
+  }
 
   function collectItemsFromUI(){
     const items = [];
@@ -716,14 +773,13 @@
   }
 
   function generatePreview(){
+    if (!validateBillForm()) return;
     try {
      const name = val("customerName");
 const phone = val("phone");
 const alt = val("altPhone");
 const address = val("address");
 
-
-      if (!name || !phone || !address) { alert('Fill customer name, phone and address'); return; }
 
       const rent_start = document.getElementById('rent_start').value || null;
       const rent_end = document.getElementById('rent_end').value || null;
@@ -866,6 +922,7 @@ const address = val("address");
 
   // ---------- DOWNLOAD PDF ----------
   document.getElementById('btnDownload').addEventListener('click', async ()=>{
+    if (!validateBillForm()) return;
     try {
       const bill = await getBillPdf();
       if (bill) downloadPdf(bill.blob, bill.filename);
@@ -877,6 +934,7 @@ const address = val("address");
 
   // ---------- SHARE VIA WHATSAPP ----------
   document.getElementById('btnWhatsApp').addEventListener('click', ()=>{
+    if (!validateBillForm()) return;
     if (!savedPayload) generatePreview();
     if (!savedPayload) return;
 
