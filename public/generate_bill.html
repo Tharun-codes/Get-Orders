@@ -234,57 +234,391 @@
     .top-row { flex-direction: column; align-items: flex-start; gap:12px; }
     .back { margin-left:0; }
   }
+
+  :root {
+    --peacock: #155B50;
+    --peacock-dark: #0D4039;
+    --accent: #B95F35;
+    --light-bg: #F0F4F2;
+    --text: #192E2B;
+    --card-bg: #FFFFFF;
+    --border: #D8E2DD;
+    --muted-text: #687B76;
+    --soft-green: #EAF2EE;
+    --warm-mark: #E6B25C;
+  }
+
+  body {
+    min-height: 100vh;
+    padding: 36px 22px;
+    font-family: "Trebuchet MS", "Lucida Sans Unicode", sans-serif;
+    background: linear-gradient(135deg, #EDF3F0 0%, #F7F8F4 58%, #EEF2F0 100%);
+    color: var(--text);
+  }
+
+  .wrap {
+    max-width: 1060px;
+    padding: 0 36px 34px;
+    border: 1px solid #D9E2DE;
+    border-top: 4px solid var(--peacock);
+    border-radius: 8px;
+    box-shadow: 0 18px 48px rgba(28, 54, 46, 0.09);
+    overflow: hidden;
+  }
+
+  .page-header {
+    padding: 30px 0 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eyebrow {
+    margin-bottom: 8px;
+    color: var(--peacock);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  h2 {
+    margin: 0;
+    color: var(--text);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 30px;
+    font-weight: 600;
+  }
+
+  .form-section {
+    padding: 26px 0 28px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 21px;
+  }
+
+  .section-index {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 50%;
+    background: #F8EEDC;
+    color: #825524;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .section-heading h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .customer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 22px;
+  }
+
+  .form-field {
+    min-width: 0;
+  }
+
+  .form-field.full-width {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    margin: 0 0 7px;
+    color: #344D48;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  input, textarea, select {
+    min-height: 46px;
+    margin-top: 0;
+    padding: 11px 13px;
+    border: 1px solid #CAD6D1;
+    border-radius: 5px;
+    background: #FFFFFF;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  }
+
+  textarea {
+    min-height: 82px;
+    resize: vertical;
+  }
+
+  input:hover, textarea:hover, select:hover {
+    border-color: #97AAA3;
+  }
+
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--peacock);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(21, 91, 80, 0.12);
+  }
+
+  .products {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 9px;
+    margin-top: 0;
+  }
+
+  .product-checkbox {
+    display: flex;
+    min-height: 46px;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid #D5E0DB;
+    border-radius: 5px;
+    background: #FFFFFF;
+    color: #354C47;
+    font-size: 13px;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  }
+
+  .product-checkbox:hover {
+    transform: translateY(-1px);
+    border-color: #90AAA0;
+    background: #F7FAF8;
+  }
+
+  .product-checkbox:has(input:checked) {
+    border-color: var(--peacock);
+    background: var(--soft-green);
+    color: var(--peacock-dark);
+  }
+
+  .product-checkbox label {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .product-checkbox input {
+    width: 16px;
+    min-height: 16px;
+    height: 16px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--peacock);
+  }
+
+  .item-row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) minmax(120px, 180px) minmax(120px, 150px) auto;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 12px;
+    border: 1px solid #D8E2DE;
+    border-radius: 5px;
+    background: #F8FAF9;
+  }
+
+  .item-row > div:first-child {
+    display: flex;
+    align-items: center;
+    padding-left: 4px;
+    color: var(--text);
+    font-size: 13px;
+    text-transform: uppercase;
+  }
+
+  .item-row input {
+    width: 100%;
+  }
+
+  .item-row button {
+    min-height: 46px;
+    padding: 0 12px;
+    border: 1px solid #E5CFC6;
+    background: #FFF9F6;
+    color: #9D482D;
+    font-size: 13px;
+  }
+
+  .item-row button:hover {
+    background: #FBECE5;
+  }
+
+  .inline-row {
+    gap: 20px;
+  }
+
+  .inline-row > * {
+    min-width: 0;
+  }
+
+  .actions {
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  button {
+    min-height: 46px;
+    padding: 0 17px;
+    border: 1px solid var(--peacock);
+    border-radius: 5px;
+    background: var(--peacock);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  }
+
+  button:hover {
+    transform: translateY(-1px);
+    border-color: var(--peacock-dark);
+    background: var(--peacock-dark);
+  }
+
+  button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 3px solid rgba(185, 95, 53, 0.35);
+    outline-offset: 2px;
+  }
+
+  .actions .button-outline {
+    border-color: #BBCAC4;
+    background: #FFFFFF;
+    color: var(--peacock-dark);
+  }
+
+  .actions .button-outline:hover {
+    border-color: var(--peacock);
+    background: var(--soft-green);
+  }
+
+  .actions .button-share {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .actions .button-share:hover {
+    border-color: #984522;
+    background: #984522;
+  }
+
+  .actions .secondary {
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted-text);
+  }
+
+  .actions .secondary:hover {
+    border-color: #D8E2DE;
+    background: #F1F4F2;
+    color: var(--text);
+  }
+
+  @media (max-width: 720px) {
+    body { padding: 16px 10px; }
+    .wrap { padding: 0 20px 24px; }
+    .page-header { padding: 23px 0 19px; }
+    h2 { font-size: 26px; }
+    .customer-grid { grid-template-columns: minmax(0, 1fr); gap: 15px; }
+    .form-field.full-width { grid-column: auto; }
+    .item-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .item-row > div:first-child { grid-column: 1 / -1; min-height: 25px; }
+    .item-row button { grid-column: 1 / -1; }
+    .inline-row { flex-direction: column; gap: 15px; }
+    .actions { justify-content: stretch; }
+    .actions button { flex: 1 1 calc(50% - 10px); }
+  }
+
+  @media (max-width: 420px) {
+    .wrap { padding-right: 15px; padding-left: 15px; }
+    .products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .product-checkbox { padding: 0 8px; }
+    .product-checkbox label { gap: 7px; font-size: 12px; }
+    .actions { flex-direction: column; }
+    .actions button { width: 100%; }
+  }
   </style>
 
 </head>
 <body>
   <div class="wrap">
-    <div class="top-row">
-      <div><h2>Generate Bill</h2><div class="muted">Enter customer details and add items to create a bill</div></div>
-    </div>
-    <hr/>
+    <header class="page-header">
+      <div class="eyebrow">SUBRAMANI ENTERPRISES</div>
+      <h2>Generate Bill</h2>
+    </header>
 
-    <!-- Customer fields -->
-    <label>Customer Name *</label>
-    <input type="text" id="customerName" 
-       style="text-transform: uppercase;"
-       oninput="this.value = this.value.toUpperCase()" required>
+    <div class="form-sections">
+      <section class="form-section" aria-labelledby="customerSectionTitle">
+        <div class="section-heading">
+          <span class="section-index">01</span>
+          <h3 id="customerSectionTitle">Customer details</h3>
+        </div>
+        <div class="customer-grid">
+          <div class="form-field">
+            <label for="customerName">Customer Name *</label>
+            <input type="text" id="customerName" style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()" required>
+          </div>
+          <div class="form-field">
+            <label for="phone">Phone *</label>
+            <input type="text" id="phone" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10);" required>
+          </div>
+          <div class="form-field">
+            <label for="altPhone">Additional Phone</label>
+            <input type="text" id="altPhone" maxlength="10" oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10);">
+          </div>
+          <div class="form-field full-width">
+            <label for="address">Address *</label>
+            <textarea id="address" style="text-transform: uppercase;" oninput="this.value = this.value.toUpperCase()" required></textarea>
+          </div>
+        </div>
+      </section>
 
+      <section class="form-section" aria-labelledby="productsSectionTitle">
+        <div class="section-heading">
+          <span class="section-index">02</span>
+          <h3 id="productsSectionTitle">Products</h3>
+        </div>
+        <div id="productsList" class="products"></div>
+        <div id="itemsContainer"></div>
+      </section>
 
-    <label>Phone *</label>
-    <input type="text" id="phone" maxlength="10"
-       oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10);" required>
+      <section class="form-section" aria-labelledby="rentalSectionTitle">
+        <div class="section-heading">
+          <span class="section-index">03</span>
+          <h3 id="rentalSectionTitle">Rental period</h3>
+        </div>
+        <div class="inline-row">
+          <div class="form-field">
+            <label for="rent_start">Rent Start</label>
+            <input type="date" id="rent_start" />
+          </div>
+          <div class="form-field">
+            <label for="rent_end">Rent End</label>
+            <input type="date" id="rent_end" />
+          </div>
+        </div>
+      </section>
 
-    <label>Additional Phone</label>
-    <input type="text" id="altPhone" maxlength="10"
-       oninput="this.value = this.value.replace(/[^0-9]/g,'').slice(0,10);">
-
-    <label>Address *</label>
-    <textarea id="address"
-          style="text-transform: uppercase;"
-          oninput="this.value = this.value.toUpperCase()" required></textarea>
-
-    <label style="margin-top:14px">Products (select multiple)</label>
-    <div id="productsList" class="products"></div>
-
-    <div id="itemsContainer"></div>
-
-    <div class="inline-row">
-      <div>
-        <label>Rent Start</label>
-        <input type="date" id="rent_start" />
+      <div class="actions">
+        <button id="btnPreview">Generate Bill (Preview)</button>
+        <button class="button-outline" id="btnDownload">Download Bill</button>
+        <button class="button-share" id="btnWhatsApp">Share via WhatsApp</button>
+        <button class="secondary" id="btnReset">Reset</button>
       </div>
-      <div>
-        <label>Rent End</label>
-        <input type="date" id="rent_end" />
-      </div>
-    </div>
-
-    <div class="actions">
-      <button id="btnPreview">Generate Bill (Preview)</button>
-      <button id="btnDownload">Download Bill</button>
-      <button id="btnWhatsApp">Share via WhatsApp</button>
-      <button class="secondary" id="btnReset">Reset</button>
     </div>
 
     <div id="billPreview"></div>
