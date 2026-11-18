@@ -428,7 +428,7 @@
 
   .item-row {
     display: grid;
-    grid-template-columns: minmax(150px, 1fr) minmax(120px, 180px) minmax(120px, 150px) auto;
+    grid-template-columns: minmax(130px, 1fr) minmax(120px, 150px) minmax(120px, 170px) auto auto;
     gap: 12px;
     margin-top: 10px;
     padding: 12px;
@@ -461,6 +461,89 @@
 
   .item-row button:hover {
     background: #FBECE5;
+  }
+
+  .item-row .date-toggle {
+    display: grid;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid #CAD6D1;
+    border-radius: 5px;
+    background: #FFFFFF;
+    color: var(--peacock-dark);
+    font-size: 19px;
+  }
+
+  .item-row .date-toggle:hover {
+    background: var(--soft-green);
+  }
+
+  .item-date-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid #D8E2DD;
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: #FFFFFF;
+  }
+
+  .item-date-fields[hidden], #sharedDatesFields[hidden] {
+    display: none;
+  }
+
+  .item-date-fields label, #sharedDatesFields label {
+    display: block;
+  }
+
+  .item-card {
+    margin-top: 12px;
+  }
+
+  .item-card .item-row {
+    margin-top: 0;
+  }
+
+  .product-batches {
+    margin-top: 16px;
+  }
+
+  .add-batch-button {
+    min-height: 38px;
+    margin-top: 8px;
+    padding: 0 14px;
+  }
+
+  .apply-dates-option {
+    margin: 0 0 14px;
+  }
+
+  .apply-dates-option label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .apply-dates-option input {
+    width: 16px;
+    min-height: 16px;
+    margin: 0;
+  }
+
+  #sharedDatesFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #F8FAF9;
   }
 
   .inline-row {
@@ -544,8 +627,9 @@
     .form-field.full-width { grid-column: auto; }
     .item-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .item-row > div:first-child { grid-column: 1 / -1; min-height: 25px; }
-    .item-row button { grid-column: 1 / -1; }
+    .item-row button:not(.date-toggle) { grid-column: 1 / -1; }
     .inline-row { flex-direction: column; gap: 15px; }
+    .item-date-fields, #sharedDatesFields { grid-template-columns: minmax(0, 1fr); }
     .actions { justify-content: stretch; }
     .actions button { flex: 1 1 calc(50% - 10px); }
   }
@@ -607,17 +691,29 @@
       <section class="form-section" aria-labelledby="rentalSectionTitle">
         <div class="section-heading">
           <span class="section-index">03</span>
-          <h3 id="rentalSectionTitle">Rental period</h3>
+          <h3 id="rentalSectionTitle">Default rental period</h3>
         </div>
-        <div class="inline-row">
+        <div id="sharedDatesFields" class="inline-row">
           <div class="form-field">
-            <label for="rent_start">Rent Start</label>
-            <input type="date" id="rent_start" />
+            <label for="sharedStartDate">Default Start Date</label>
+            <input type="date" id="sharedStartDate">
           </div>
           <div class="form-field">
-            <label for="rent_end">Rent End</label>
-            <input type="date" id="rent_end" />
+            <label for="sharedEndDate">Default End Date</label>
+            <input type="date" id="sharedEndDate">
           </div>
+        </div>
+        <p class="muted">These dates apply to all products unless you set different dates using that item's calendar.</p>
+      </section>
+
+      <section class="form-section" aria-labelledby="paymentSectionTitle">
+        <div class="section-heading">
+          <span class="section-index">04</span>
+          <h3 id="paymentSectionTitle">Payment</h3>
+        </div>
+        <div class="form-field">
+          <label for="advance">Advance Amount (Optional)</label>
+          <input type="number" id="advance" min="0" step="0.01" placeholder="Leave blank if no advance was paid">
         </div>
       </section>
 
@@ -647,6 +743,26 @@
   let preparedBillPdf = null;
   let preparedBillSignature = null;
   let preparedBillPromise = null;
+  let batchId = 0;
+  const defaultStartDate = document.getElementById('sharedStartDate');
+  const defaultEndDate = document.getElementById('sharedEndDate');
+
+  function invalidatePreparedBill(){
+    savedPayload = null;
+    preparedBillPdf = null;
+    preparedBillSignature = null;
+    preparedBillPromise = null;
+  }
+
+  document.getElementById('advance').addEventListener('input', () => {
+    invalidatePreparedBill();
+  });
+
+  defaultStartDate.addEventListener('input', () => {
+    defaultEndDate.min = defaultStartDate.value || '';
+    invalidatePreparedBill();
+  });
+  defaultEndDate.addEventListener('input', invalidatePreparedBill);
 
   // populate product checkboxes
   PRODUCTS.forEach(p=>{
@@ -657,36 +773,107 @@
     // listen change on checkbox
     div.querySelector('input').addEventListener('change', (ev)=>{
       toggleProductRow(p, ev.target.checked);
+      invalidatePreparedBill();
     });
   });
 
   function toggleProductRow(prod, isChecked){
     document.getElementById('productValidationMessage').hidden = true;
+    invalidatePreparedBill();
     if (isChecked) {
-      if (document.getElementById(`row_${prod}`)) return;
-      const row = document.createElement('div');
-      row.className = 'item-row';
-      row.id = `row_${prod}`;
-      row.innerHTML = `
-        <div style="flex:1"><strong>${prod}</strong></div>
-        <input placeholder="Price" id="price_${prod}" type="number" min="0.01" step="0.01" required />
-        <input placeholder="Quantity" id="qty_${prod}" type="number" min="1" required />
-        <div><button type="button" onclick="removeProduct('${prod}')">Remove</button></div>
-      `;
-      itemsContainer.appendChild(row);
+      if (document.getElementById(`batches_${prod}`)) return;
+      const group = document.createElement('div');
+      group.className = 'product-batches';
+      group.id = `batches_${prod}`;
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.className = 'add-batch-button button-outline';
+      addButton.textContent = `+ Add ${prod} return batch`;
+      addButton.addEventListener('click', () => {
+        group.dataset.partialReturns = 'true';
+        group.querySelectorAll('.batch-item').forEach(row => {
+          const quantityField = row.querySelector('.batch-quantity');
+          quantityField.placeholder = 'Quantity returned';
+          quantityField.setAttribute('aria-label', `${prod} quantity returned`);
+          row.querySelector('.remove-batch-button').textContent = 'Remove batch';
+        });
+        createBatchRow(prod);
+        invalidatePreparedBill();
+      });
+      group.appendChild(addButton);
+      itemsContainer.appendChild(group);
+      createBatchRow(prod, false);
     } else {
-      const r = document.getElementById(`row_${prod}`);
+      const r = document.getElementById(`batches_${prod}`);
       if (r) r.remove();
+      invalidatePreparedBill();
       const chk = document.getElementById(`chk_${prod}`);
       if (chk) chk.checked = false;
     }
   }
 
+  function createBatchRow(product, isReturnBatch = true){
+    const group = document.getElementById(`batches_${product}`);
+    if (!group) return;
+    const existingRows = [...group.querySelectorAll('.batch-item')];
+    const previousRate = existingRows.at(-1)?.querySelector('.batch-rate')?.value || '';
+    const id = ++batchId;
+    const row = document.createElement('div');
+    row.className = 'item-card batch-item';
+    row.dataset.product = product;
+    row.innerHTML = `
+      <div class="item-row">
+        <div><strong>${escapeHtml(product)}</strong></div>
+        <input class="batch-rate" aria-label="${escapeHtml(product)} rate per day" placeholder="Rate per day" type="number" min="0.01" step="0.01" value="${escapeHtml(previousRate)}" required>
+        <input class="batch-quantity" aria-label="${escapeHtml(product)} ${isReturnBatch ? 'quantity returned' : 'quantity'}" placeholder="${isReturnBatch ? 'Quantity returned' : 'Quantity'}" type="number" min="1" step="1" required>
+        <button type="button" class="date-toggle" aria-label="Set dates for ${escapeHtml(product)} return batch ${id}" aria-expanded="false" title="Set return dates">📅</button>
+        <button type="button" class="remove-batch-button">${isReturnBatch ? 'Remove batch' : 'Remove item'}</button>
+      </div>
+      <div class="item-date-fields" hidden>
+        <div class="form-field">
+          <label for="start_${id}">Start Date</label>
+          <input class="batch-start-date" id="start_${id}" type="date" required>
+        </div>
+        <div class="form-field">
+          <label for="return_${id}">Return Date</label>
+          <input class="batch-return-date" id="return_${id}" type="date" required>
+        </div>
+      </div>
+    `;
+    group.insertBefore(row, group.querySelector('.add-batch-button'));
+    row.querySelectorAll('input').forEach(field => {
+      field.addEventListener('input', invalidatePreparedBill);
+      field.addEventListener('change', () => {
+        if (field.classList.contains('batch-start-date')) {
+          row.querySelector('.batch-return-date').min = field.value || '';
+        }
+        invalidatePreparedBill();
+      });
+    });
+    const dateToggle = row.querySelector('.date-toggle');
+    const dateFields = row.querySelector('.item-date-fields');
+    dateToggle.addEventListener('click', () => {
+      dateFields.hidden = !dateFields.hidden;
+      dateToggle.setAttribute('aria-expanded', String(!dateFields.hidden));
+      if (!dateFields.hidden) row.querySelector('.batch-start-date').focus();
+    });
+    row.querySelector('.remove-batch-button').addEventListener('click', () => {
+      row.remove();
+      if (!group.querySelector('.batch-item')) {
+        group.remove();
+        document.getElementById(`chk_${product}`).checked = false;
+      }
+      invalidatePreparedBill();
+    });
+    invalidatePreparedBill();
+  }
+
   function removeProduct(prod){
     const chk = document.getElementById(`chk_${prod}`);
     if (chk) chk.checked = false;
-    const r = document.getElementById(`row_${prod}`);
+    const r = document.getElementById(`batches_${prod}`);
     if (r) r.remove();
+    invalidatePreparedBill();
   }
 
   function escapeHtml(value){
@@ -703,6 +890,11 @@
       field.addEventListener('input', () => field.setCustomValidity(''));
       field.dataset.validationHandler = 'true';
     }
+    const dateFields = field.closest('.item-date-fields');
+    if (dateFields) {
+      dateFields.hidden = false;
+      dateFields.parentElement.querySelector('.date-toggle').setAttribute('aria-expanded', 'true');
+    }
     field.setCustomValidity(message);
     field.scrollIntoView({ behavior: 'smooth', block: 'center' });
     field.focus({ preventScroll: true });
@@ -710,7 +902,35 @@
     return false;
   }
 
+  function computeDays(startDate, endDate){
+    if (!startDate || !endDate) return 0;
+    const parseDate = value => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+      const [year, month, day] = value.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+      return date;
+    };
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    if (!start || !end || end < start) return 0;
+    return Math.max(0, Math.floor((end - start) / 86400000) + 1);
+  }
+
+  function getBatchDates(row){
+    const startDate = row.querySelector('.batch-start-date').value;
+    const endDate = row.querySelector('.batch-return-date').value;
+    if (startDate || endDate) return { startDate, endDate, hasOverride: true };
+    return {
+      startDate: defaultStartDate.value,
+      endDate: defaultEndDate.value,
+      hasOverride: false
+    };
+  }
+
   function validateBillForm(){
+    const advanceField = document.getElementById('advance');
+    advanceField.setCustomValidity('');
     const requiredFields = [
       ['customerName', 'Enter the customer name.'],
       ['phone', 'Enter the customer phone number.'],
@@ -733,43 +953,76 @@
       return false;
     }
 
-    for (const product of selectedProducts) {
-      const priceField = document.getElementById(`price_${product}`);
-      const quantityField = document.getElementById(`qty_${product}`);
+    const batchRows = [...itemsContainer.querySelectorAll('.batch-item')];
+    if (batchRows.length === 0) return false;
+    let total = 0;
+    for (const row of batchRows) {
+      const product = row.dataset.product;
+      const priceField = row.querySelector('.batch-rate');
+      const quantityField = row.querySelector('.batch-quantity');
+      const startField = row.querySelector('.batch-start-date');
+      const endField = row.querySelector('.batch-return-date');
+      const dates = getBatchDates(row);
+      startField.setCustomValidity('');
+      endField.setCustomValidity('');
       if (!priceField.value || !priceField.checkValidity()) {
         return focusInvalidField(priceField, 'Enter a price greater than zero.');
       }
       if (!quantityField.value || !quantityField.checkValidity()) {
         return focusInvalidField(quantityField, 'Enter a whole quantity of at least 1.');
       }
+      if (!dates.startDate) {
+        return focusInvalidField(
+          dates.hasOverride ? startField : defaultStartDate,
+          `Enter a start date for this ${product} return batch, or set a default rental period.`
+        );
+      }
+      if (!dates.endDate) {
+        return focusInvalidField(
+          dates.hasOverride ? endField : defaultEndDate,
+          `Enter a return date for this ${product} batch, or set a default rental period.`
+        );
+      }
+      if (!computeDays(dates.startDate, dates.endDate)) {
+        return focusInvalidField(
+          dates.hasOverride ? endField : defaultEndDate,
+          'Return date cannot be before the start date.'
+        );
+      }
+      const days = computeDays(dates.startDate, dates.endDate);
+      total += Number(priceField.value) * Number(quantityField.value) * days;
+    }
+
+    if (!advanceField.checkValidity()) {
+      return focusInvalidField(advanceField, 'Enter a valid non-negative advance amount.');
+    }
+    if (Number(advanceField.value || 0) > Number(total.toFixed(2))) {
+      return focusInvalidField(advanceField, 'Advance amount cannot be greater than the total bill amount.');
     }
     return true;
   }
 
   function collectItemsFromUI(){
     const items = [];
-    for (const p of PRODUCTS){
-      const chk = document.getElementById(`chk_${p}`);
-      if (chk && chk.checked){
-        const price = parseFloat(document.getElementById(`price_${p}`).value || 0);
-        const qty = parseInt(document.getElementById(`qty_${p}`).value || 0, 10);
-        if (!isFinite(price) || price <= 0 || !Number.isInteger(qty) || qty <= 0) {
-          throw new Error(`Enter valid price & qty for ${p}`);
-        }
-        items.push({ product: p, price, quantity: qty });
+    for (const row of itemsContainer.querySelectorAll('.batch-item')){
+      const product = row.dataset.product;
+      const price = Number(row.querySelector('.batch-rate').value);
+      const quantity = Number(row.querySelector('.batch-quantity').value);
+      const { startDate, endDate } = getBatchDates(row);
+      if (!Number.isFinite(price) || price <= 0 || !Number.isInteger(quantity) || quantity <= 0) {
+        throw new Error(`Enter valid rate and returned quantity for ${product}`);
       }
+      items.push({
+        product,
+        price,
+        quantity,
+        startDate,
+        endDate,
+        totalDays: computeDays(startDate, endDate)
+      });
     }
-    if (items.length === 0) throw new Error('Select at least one product');
+    if (items.length === 0) throw new Error('Select at least one product or return batch');
     return items;
-  }
-
-  function computeDays(start, end){
-    if (!start || !end) return 1;
-    const s = new Date(start);
-    const e = new Date(end);
-    if (isNaN(s) || isNaN(e)) return 1;
-    const diff = Math.floor((e - s) / (1000*60*60*24)) + 1;
-    return Math.max(1, diff);
   }
 
   function generatePreview(){
@@ -779,26 +1032,22 @@
 const phone = val("phone");
 const alt = val("altPhone");
 const address = val("address");
+const advance = Number(val("advance") || 0);
 
-
-      const rent_start = document.getElementById('rent_start').value || null;
-      const rent_end = document.getElementById('rent_end').value || null;
-      const days = computeDays(rent_start, rent_end);
 
       const items = collectItemsFromUI();
 
-      // compute totals
-      let grand = 0;
       const rows = items.map(it=>{
-        const amt = Number(it.price) * Number(it.quantity) * days;
-        grand += amt;
-        return { ...it, amount: amt };
+        const amount = Number(it.price) * Number(it.quantity) * it.totalDays;
+        return { ...it, amount };
       });
+      const grand = rows.reduce((sum, item) => sum + item.amount, 0);
 
-      // store payload for download (server expects items with price & quantity)
       savedPayload = {
-        name, phone, alt_phone: alt, address, rent_start, rent_end,
-        items: items.map(it => ({ product: it.product, price: it.price, quantity: it.quantity }))
+        name, phone, alt_phone: alt, address, advance,
+        items: items.map(({ product, price, quantity, startDate, endDate, totalDays }) => ({
+          product, price, quantity, startDate, endDate, totalDays
+        }))
       };
       prepareBillPdf();
 
@@ -811,20 +1060,20 @@ const address = val("address");
                   <hr/>
                   <div><strong>Name: ${escapeHtml(name)}</strong> &nbsp; <strong>Phone:</strong> ${escapeHtml(phone)}</div>
                   <div><strong>Address:</strong> ${escapeHtml(address)}</div>
-                  <div style="margin-top:8px"><strong>
-                  Rent: ${rent_start || 'N/A'} 
-                  ${rent_end ? (' to ' + rent_end) : ''} 
-                  &nbsp; (${days} day${days>1?'s':''})</strong>
-                  </div>
                   <table>
-                    <thead><tr><th>Description</th><th>Price</th><th>Qty</th><th>Rate/Day</th><th>Amount</th></tr></thead><tbody>`;
+                    <thead><tr><th>Item Name</th><th>Start Date</th><th>Return Date</th><th>Total Days</th><th>Qty Returned</th><th>Rate/Day</th><th>Line Total</th></tr></thead><tbody>`;
 
       rows.forEach(r=> {
-        const perDayAmount = Number(r.price) * Number(r.quantity);
-        html += `<tr><td>${escapeHtml(r.product).toUpperCase()}</td><td>${Number(r.price).toFixed(2)}</td><td>${r.quantity}</td><td>₹ ${perDayAmount.toFixed(2)} x ${days}</td><td>₹ ${Number(r.amount).toFixed(2)}</td></tr>`;
+        html += `<tr><td>${escapeHtml(r.product).toUpperCase()}</td><td>${r.startDate}</td><td>${r.endDate}</td><td>${r.totalDays}</td><td>${r.quantity}</td><td>₹ ${Number(r.price).toFixed(2)}</td><td>₹ ${Number(r.amount).toFixed(2)}</td></tr>`;
       });
 
-      html += `<tr><td colspan="4" style="text-align:right"><strong>Total</strong></td><td><strong>₹ ${Number(grand).toFixed(2)}</strong></td></tr>`;
+      const grandTotal = Number(grand.toFixed(2));
+      html += `<tr><td colspan="6" style="text-align:right"><strong>Total</strong></td><td><strong>₹ ${grandTotal.toFixed(2)}</strong></td></tr>`;
+      if (advance > 0) {
+        const balance = grandTotal - advance;
+        html += `<tr><td colspan="6" style="text-align:right"><strong>ADVANCE</strong></td><td><strong>₹ ${advance.toFixed(2)}</strong></td></tr>`;
+        html += `<tr><td colspan="6" style="text-align:right"><strong>BALANCE AMT</strong></td><td><strong>₹ ${balance.toFixed(2)}</strong></td></tr>`;
+      }
       html += `</tbody></table>`;
 
       previewBox.innerHTML = html;
@@ -901,22 +1150,23 @@ const address = val("address");
   }
 
   function getBillShareText(){
-    const days = computeDays(savedPayload.rent_start, savedPayload.rent_end);
-    const perDayTotal = savedPayload.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const grandTotal = Number(savedPayload.items.reduce((sum, item) => {
+      const days = computeDays(item.startDate, item.endDate);
+      return sum + item.price * item.quantity * days;
+    }, 0).toFixed(2));
+    const advance = Number(savedPayload.advance || 0);
     const lines = savedPayload.items.map(item =>
-      `${item.product}: ${item.quantity} x Rs. ${Number(item.price).toFixed(2)}`
+      `${item.product}: ${item.quantity} x Rs. ${Number(item.price).toFixed(2)} x ${computeDays(item.startDate, item.endDate)} day(s) | ${item.startDate || '-'} to ${item.endDate || '-'}`
     );
-    const rentDates = savedPayload.rent_start || savedPayload.rent_end
-      ? `Rent: ${savedPayload.rent_start || '-'} to ${savedPayload.rent_end || '-'}`
-      : '';
     return [
       'SUBRAMANI ENTERPRISES - Bill',
       `Customer: ${savedPayload.name}`,
       `Phone: ${savedPayload.phone}`,
       ...lines,
-      rentDates,
-      `Days: ${days}`,
-      `Total: Rs. ${(perDayTotal * days).toFixed(2)}`
+      `Total: Rs. ${grandTotal.toFixed(2)}`,
+      ...(advance > 0
+        ? [`Advance: Rs. ${advance.toFixed(2)}`, `Balance amount: Rs. ${(grandTotal - advance).toFixed(2)}`]
+        : [])
     ].filter(Boolean).join('\n');
   }
 
@@ -976,8 +1226,10 @@ const address = val("address");
     document.getElementById('phone').value = '';
     document.getElementById('altPhone').value = '';
     document.getElementById('address').value = '';
-    document.getElementById('rent_start').value='';
-    document.getElementById('rent_end').value='';
+    document.getElementById('advance').value='';
+    defaultStartDate.value = '';
+    defaultEndDate.value = '';
+    defaultEndDate.min = '';
     previewBox.style.display = 'none';
     savedPayload = null;
     preparedBillPdf = null;
@@ -987,7 +1239,7 @@ const address = val("address");
     PRODUCTS.forEach(p=>{
       const chk = document.getElementById(`chk_${p}`);
       if (chk) chk.checked = false;
-      const r = document.getElementById(`row_${p}`);
+      const r = document.getElementById(`batches_${p}`);
       if (r) r.remove();
     });
   });

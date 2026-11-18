@@ -32,35 +32,78 @@ function safeNumber(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function parseCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return null;
+  return date;
+}
+
+function rentalDays(startDate, endDate) {
+  if (!startDate || !endDate) return 0;
+  const start = parseCalendarDate(startDate);
+  const end = parseCalendarDate(endDate);
+  if (!start || !end || end < start) return 0;
+  return Math.max(0, Math.floor((end - start) / 86400000) + 1);
+}
+
+function formatCalendarDate(value) {
+  if (!value) return "-";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
 /* ============================================================
    GENERATE BILL
 ============================================================ */
 app.post("/api/generate-bill", async (req, res) => {
-  const { name, phone, alt_phone, address, rent_start, rent_end, items } = req.body || {};
+  const { name, phone, alt_phone, address, items, advance } = req.body || {};
   if (!name || !phone || !address) {
     return res.status(400).json({ success: false, error: "Missing required fields (name, phone, address)" });
   }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ success: false, error: "No product items found" });
   }
+  if (items.some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
+    return res.status(400).json({ success: false, error: "Each product item must be an object" });
+  }
 
   const billItems = items.map((item) => ({
     product: String(item.product || "").trim(),
     price: safeNumber(item.price),
     quantity: safeNumber(item.quantity),
+    startDate: item.startDate || "",
+    endDate: item.endDate || "",
   }));
   if (billItems.some((item) => !item.product || item.price <= 0 || !Number.isInteger(item.quantity) || item.quantity <= 0)) {
     return res.status(400).json({ success: false, error: "Each item needs a product, positive price, and positive whole-number quantity" });
   }
-
-  const start = rent_start ? dayjs(rent_start) : null;
-  const end = rent_end ? dayjs(rent_end) : null;
-  if ((start && !start.isValid()) || (end && !end.isValid())) {
-    return res.status(400).json({ success: false, error: "Invalid rent date" });
+  for (const item of billItems) {
+    if (!item.startDate || !item.endDate) {
+      return res.status(400).json({ success: false, error: "Each return batch needs a start date and return date" });
+    }
+    if (item.startDate && !rentalDays(item.startDate, item.endDate)) {
+      return res.status(400).json({ success: false, error: "Each item's end date must be on or after its valid start date" });
+    }
+    item.totalDays = rentalDays(item.startDate, item.endDate);
+    item.amount = item.price * item.quantity * item.totalDays;
   }
-  const daysCount = start && end ? Math.max(1, end.diff(start, "day") + 1) : 1;
-  const perDayTotal = billItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const grandTotal = perDayTotal * daysCount;
+  const grandTotal = billItems.reduce((sum, item) => sum + item.amount, 0);
+  const parsedAdvanceAmount = advance == null || advance === "" ? 0 : Number(advance);
+  const roundedGrandTotal = Number(grandTotal.toFixed(2));
+  if (!Number.isFinite(parsedAdvanceAmount) || parsedAdvanceAmount < 0) {
+    return res.status(400).json({ success: false, error: "Advance must be a non-negative amount no greater than the bill total" });
+  }
+  const advanceAmount = Number(parsedAdvanceAmount.toFixed(2));
+  if (advanceAmount > roundedGrandTotal) {
+    return res.status(400).json({ success: false, error: "Advance must be a non-negative amount no greater than the bill total" });
+  }
+  const balanceAmount = roundedGrandTotal - advanceAmount;
   const safeName = String(name).trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/[. ]+$/g, "") || "customer";
   const fallbackName = safeName.replace(/[^\x20-\x7E]/g, "_");
   const encodedName = encodeURIComponent(safeName).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -92,58 +135,53 @@ app.post("/api/generate-bill", async (req, res) => {
   doc.text(`PHONE: ${phone}${alt_phone ? ` / ${alt_phone}` : ""}`, 40, y, { width: pageWidth, align: "center" });
   y += 24;
   doc.text(`ADDRESS: ${address}`, 40, y, { width: pageWidth, align: "center" });
-  y = doc.y + 16;
-  const rentStart = start ? start.format("DD/MM/YYYY") : "-";
-  const rentEnd = end ? end.format("DD/MM/YYYY") : "-";
-  doc.font("Helvetica-Bold");
-  doc.text(`RENT: ${rentStart} - ${rentEnd} (${daysCount} day${daysCount === 1 ? "" : "s"})`, 40, y, { width: pageWidth, align: "center" });
-  doc.font("Helvetica");
-
   y = doc.y + 30;
   const drawTableHeader = (top) => {
-    doc.font("Helvetica-Bold").fontSize(11).fillColor(teal);
-    doc.text("DESCRIPTION", 40, top);
-    doc.text("PRICE", 260, top);
-    doc.text("QTY", 340, top);
-    doc.text("RATE/DAY", 390, top);
-    doc.text("AMOUNT", 465, top);
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(teal);
+    doc.text("ITEM NAME", 40, top, { width: 100 });
+    doc.text("START", 145, top, { width: 60 });
+    doc.text("RETURN", 210, top, { width: 60 });
+    doc.text("DAYS", 275, top, { width: 30 });
+    doc.text("QTY RET.", 312, top, { width: 50 });
+    doc.text("RATE/DAY", 370, top, { width: 65 });
+    doc.text("LINE TOTAL", 445, top, { width: 105 });
     doc.moveTo(40, top + 16).lineTo(550, top + 16).strokeColor(teal).stroke();
-    doc.font("Helvetica").fontSize(10).fillColor("#000");
+    doc.font("Helvetica").fontSize(9).fillColor("#000");
   };
   drawTableHeader(y);
-  y += 28;
+  y += 24;
 
   for (const item of billItems) {
-    if (y + 45 > doc.page.height - 60) {
+    if (y + 48 > doc.page.height - 60) {
       doc.addPage();
       y = 40;
       drawTableHeader(y);
-      y += 28;
+      y += 24;
     }
-    const amount = item.price * item.quantity * daysCount;
-    doc.text(item.product.toUpperCase(), 40, y, { width: 200 });
-    doc.text(item.price.toFixed(2), 260, y);
-    doc.text(String(item.quantity), 340, y);
-    doc.text(`${(item.price * item.quantity).toFixed(2)} x ${daysCount}`, 390, y, { width: 65 });
-    doc.text(`Rs. ${amount.toFixed(2)}`, 465, y);
-    y += 28;
+    doc.text(item.product.toUpperCase(), 40, y, { width: 100 });
+    doc.text(formatCalendarDate(item.startDate), 145, y, { width: 60 });
+    doc.text(formatCalendarDate(item.endDate), 210, y, { width: 60 });
+    doc.text(String(item.totalDays), 275, y, { width: 30 });
+    doc.text(String(item.quantity), 312, y, { width: 50 });
+    doc.text(`Rs. ${item.price.toFixed(2)}`, 370, y, { width: 68 });
+    doc.text(`Rs. ${item.amount.toFixed(2)}`, 445, y, { width: 105 });
+    y += 36;
     doc.moveTo(40, y).lineTo(550, y).strokeColor("#ddd").stroke();
-    y += 10;
+    y += 8;
   }
 
-  if (y + 95 > doc.page.height - 60) {
+  if (y + 80 > doc.page.height - 60) {
     doc.addPage();
     y = 50;
   }
   y += 15;
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(teal).text("PRICE CALCULATION SUMMARY", 40, y);
-  y += 20;
-  doc.font("Helvetica").fontSize(10).fillColor("#000");
-  doc.text(`Products total per day: Rs. ${perDayTotal.toFixed(2)}`, 40, y);
-  y += 16;
-  doc.text(`Number of days: ${daysCount}`, 40, y);
-  y += 20;
-  doc.font("Helvetica-Bold").fontSize(14).fillColor(teal).text(`TOTAL: Rs. ${grandTotal.toFixed(2)}`, 40, y);
+  doc.font("Helvetica-Bold").fontSize(14).fillColor(teal).text(`TOTAL: Rs. ${roundedGrandTotal.toFixed(2)}`, 40, y);
+  if (advanceAmount > 0) {
+    y += 20;
+    doc.fontSize(11).text(`ADVANCE: Rs. ${advanceAmount.toFixed(2)}`, 40, y);
+    y += 18;
+    doc.text(`BALANCE AMT: Rs. ${balanceAmount.toFixed(2)}`, 40, y);
+  }
   doc.moveDown(3);
   doc.font("Helvetica").fontSize(9).fillColor(teal).text(
     "5TH CROSS, CHANNEL RIGHT SIDE, VENKATESHA NAGAR, SHIMOGA | 577202 | PHONE: 6363499137",
