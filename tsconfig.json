@@ -3,6 +3,8 @@
     "target": "esnext",
     "module": "nodenext",
     "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
