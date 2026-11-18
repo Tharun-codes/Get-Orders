@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Tests passed successfully\"",
+    "build": "tsc",
     "start": "node server.js"
   },
   "keywords": [],
